@@ -1,4 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
+import { hash, randomBytes } from "node:crypto";
+import { encode } from "node:punycode";
 
 type PasswordResetToken = {
   id: number;
@@ -13,28 +15,31 @@ type CreatedPasswordResetToken = PasswordResetToken & {
 };
 
 function hashPasswordResetToken(token: string): string {
-  return token;
+  const tokenHashed = hash('sha256', token);
+  return tokenHashed
 }
 
 export function createPasswordResetToken(
   db: DatabaseSync,
   userId: number,
 ): CreatedPasswordResetToken {
-  const token = `${userId}-${Date.now()}`;
-  const tokenHash = hashPasswordResetToken(token);
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  // const token = `${userId}-${Date.now()}`;
+  const token = randomBytes(32);
+  const tokenHex = token.toString('hex')
+  const tokenHash = hashPasswordResetToken(tokenHex);
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
   db.prepare(`
       INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
       VALUES (?, ?, ?)
     `).run(userId, tokenHash, expiresAt);
 
-  const row = findPasswordResetToken(db, token);
+  const row = findPasswordResetToken(db, tokenHex);
   if (!row) {
     throw new Error("Failed to create password reset token");
   }
 
-  return { ...row, token };
+  return { ...row, token: tokenHex };
 }
 
 export function findPasswordResetToken(
